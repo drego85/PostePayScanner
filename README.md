@@ -6,7 +6,8 @@ La notifica via eMail conterrà le seguenti informazioni:
 * Data di valuta;
 * Data contabile;
 * Addebito o Accredito;
-* Descrizione movimento.
+* Descrizione movimento;
+* Saldo Contabile e Disponibile.
 
 #### Configurazione
 

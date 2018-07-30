@@ -7,11 +7,6 @@ import logging
 import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-
-# Disattivo i warning di sicurezza di SSL, avendo il sito Poste Italiane diversi errori di implementazione
-# https://www.ssllabs.com/ssltest/analyze.html?d=securelogin.bp.poste.it
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Inizializzo i LOG
 logging.basicConfig(filename="postepay.log",
@@ -25,7 +20,8 @@ timeoutconnection = 10
 movimentiList = []
 
 
-def send_email(datacontabile, datavaluta, addebito, accredito, descrizioneoperazione):
+def send_email(datacontabile, datavaluta, addebito, accredito, descrizioneoperazione, saldodata, saldocontabile,
+               saldodisponibile):
     try:
         fromaddr = Config.smtp_from
         username = Config.smtp_mail
@@ -46,6 +42,10 @@ def send_email(datacontabile, datavaluta, addebito, accredito, descrizioneoperaz
         msg += "Addebito: " + addebito + "\n"
         msg += "Accredito: " + accredito + "\n"
         msg += "Descrizione: " + descrizioneoperazione + "\n"
+        msg += "\n"
+        msg += "Saldo Data: " + saldodata + "\n"
+        msg += "Saldo Contabile: " + saldocontabile + "\n"
+        msg += "Saldo Disponibile: " + saldodisponibile + "\n"
         msg += "\n\n"
 
         smtpserver.sendmail(fromaddr, Config.smtp_tomail, msg)
@@ -96,18 +96,38 @@ def main():
     session = requests.Session()
     url = "https://securelogin.bp.poste.it/jod-fcc/login"
     data = {"username": Config.posteusername, "password": Config.postepassword}
-    session.post(url, data=data, headers=headerdesktop, timeout=timeoutconnection, verify=False)
+    session.post(url, data=data, headers=headerdesktop, timeout=timeoutconnection)
     cookie = session.cookies.get_dict()
-
     # Acquisisco la pagina con i movimenti della carta
     url = "https://postepay.poste.it/portalppay/viewListaMovimentiAction.do"
     data = {"cvv2": "", "dataAA": "", "dataMM": "", "numeroCarta": "", "numeroMovimenti": "40", "prosegui": "esegui",
             "selPan": Config.posteidcarta}
-    page = requests.post(url, data=data, cookies=cookie, headers=headerdesktop, timeout=timeoutconnection,
-                         verify=False)
+    page = requests.post(url, data=data, cookies=cookie, headers=headerdesktop, timeout=timeoutconnection)
 
     # Scrappo il contenuto della pagina per acquisire l'elenco dei movimenti
     soup = BeautifulSoup(page.text, "html.parser")
+
+    for tablesaldo in soup.find_all("table", attrs={"class": "t-data", "brk:name": "listamov_table"}):
+        for idx, row in enumerate(tablesaldo.findAll("tr")):
+
+            # Se sto analizzando la prima riga della tabella (ovvero quella con i titoli) salto e proseguo
+            if idx == 0:
+                continue
+
+            cells = row.findAll("td")
+
+            saldodata = cells[0].text.strip()
+            saldocontabile = cells[1].text.strip()
+            saldocontabile = saldocontabile.replace("\t", "")
+            saldocontabile = saldocontabile.replace(" ", "")
+            saldocontabile = saldocontabile.replace("\r", "")
+            saldocontabile = saldocontabile.replace("\n", "")
+
+            saldodisponibile = cells[2].text.strip().replace("\t", "")
+            saldodisponibile = saldodisponibile.replace("\t", "")
+            saldodisponibile = saldodisponibile.replace(" ", "")
+            saldodisponibile = saldodisponibile.replace("\r", "")
+            saldodisponibile = saldodisponibile.replace("\n", "")
 
     for table in soup.find_all("table", attrs={"class": "t-data", "id": "row"}):
         for idx, row in enumerate(table.findAll("tr")):
@@ -132,7 +152,8 @@ def main():
                 logging.info("Nuovo movimento rilevato", exc_info=True)
 
                 # Invio una eMail di notifica
-                send_email(datacontabile, datavaluta, addebito, accredito, descrizioneoperazione)
+                send_email(datacontabile, datavaluta, addebito, accredito, descrizioneoperazione, saldodata,
+                           saldocontabile, saldodisponibile)
 
                 # Salvo il nuovo movimento
                 movimentiList.append(casehash)
