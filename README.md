@@ -27,7 +27,7 @@ Il file Config.sample.py va rinominato in Config.py e compilato con i seguenti d
 
 **Carta ID**
 
-La Carta ID/Alias è un numero univoco che identifica la carta PostePay per identificarlo è possibile accedere a [questo URL](https://postepay.poste.it/ppay/private/rest/ppayUtenteService/postepay) successivamente all'avvenuto login al portale di poste.
+La Carta ID/Alias è un numero univoco che identifica la carta PostePay. Per ottenerlo è possibile accedere a [questo URL](https://postepay.poste.it/ppay/private/rest/ppayUtenteService/postepay) successivamente all'avvenuto login nel portale di poste.
 
 Dall'output ottenuto bisogna riportare nel file di configurazione il valore dell'alias.
 
