@@ -13,7 +13,7 @@ La notifica via eMail conterrà le seguenti informazioni:
 
 ![Esempio Notifica](https://raw.githubusercontent.com/drego85/PostePayScanner/master/screenshots/notifica_email.png)
 
-#### Configurazione
+**Configurazione**
 
 Il file Config.sample.py va rinominato in Config.py e compilato con i seguenti dati:
 * smtp_mail > eMail di autenticazione al server SMTP
@@ -25,9 +25,11 @@ Il file Config.sample.py va rinominato in Config.py e compilato con i seguenti d
 * postepassword > Password di accesso al portale di Poste Italiane
 * posteidcarta > Carta ID (non è il numero/pan della vostra carta di credito) di seguito un approfondimento
 
-#### Carta ID
+**Carta ID**
 
-Visualizzando la pagina di ["Saldo e Lista Movimenti"](https://postepay.poste.it/portalppay/startListaMovimentiAction.do) analizzando il codice HTML della pagina è possibile identificare il Card ID associato alla vostra carta pregapata. Inserire pertanto tale valore, comprensivo degli zero iniziali, nel file di configurare.
+La Carta ID/Alias è un numero univoco che identifica la carta PostePay per identificarlo è possibile accedere a [questo URL](https://postepay.poste.it/ppay/private/rest/ppayUtenteService/postepay) successivamente all'avvenuto login al portale di poste.
 
-![Esempio codice HTML](https://raw.githubusercontent.com/drego85/PostePayScanner/master/screenshots/cartaid.png)
+Dall'output ottenuto bisogna riportare nel file di configurazione il valore dell'alias.
+
+![Esempio visualizzazione Carta ID](https://raw.githubusercontent.com/drego85/PostePayScanner/master/screenshots/cartaid.png)
 

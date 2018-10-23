@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 import sys
+import json
 import Config
 import hashlib
 import smtplib
 import logging
 import requests
+from random import randint
 from datetime import datetime
 from bs4 import BeautifulSoup
 
@@ -13,8 +15,6 @@ logging.basicConfig(filename="postepay.log",
                     format="%(asctime)s - %(funcName)10s():%(lineno)s - %(levelname)s - %(message)s",
                     level=logging.INFO)
 
-headerdesktop = {"User-Agent": "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; WOW64; Trident/6.0)",
-                 "Accept-Language": "it"}
 timeoutconnection = 10
 
 movimentiList = []
@@ -89,75 +89,90 @@ def save_analyzed_case(casehash):
 
 
 def main():
-    # Carico casi gia analizzati
+    # Carico transazioni gia analizzate
     load_analyzed_case()
 
-    # Apro una sessione Requests per ottenere i cookie di autenticazione
-    session = requests.Session()
+    # Apro una sessione requests per autenticarmi e ottenere i cookie di sessione
     url = "https://securelogin.bp.poste.it/jod-fcc/login"
+
+    headerdesktop = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:62.0) Gecko/20100101 Firefox/62.0",
+                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                     "Accept-Language": "it,en-US;q=0.7,en;q=0.3",
+                     "Accept-Encoding": "gzip, deflate, br",
+                     "Referer": "https://www.poste.it/index.html",
+                     "Content-Type": "application/x-www-form-urlencoded",
+                     "Content-Length": "170",
+                     "DNT": "1",
+                     "Connection": "keep-alive",
+                     "Upgrade-Insecure-Requests": "1",
+                     "Pragma": "no-cache",
+                     "Cache-Control": "no-cache"}
+
+    session = requests.Session()
     data = {"username": Config.posteusername, "password": Config.postepassword}
     session.post(url, data=data, headers=headerdesktop, timeout=timeoutconnection)
     cookie = session.cookies.get_dict()
-    # Acquisisco la pagina con i movimenti della carta
-    url = "https://postepay.poste.it/portalppay/viewListaMovimentiAction.do"
-    data = {"cvv2": "", "dataAA": "", "dataMM": "", "numeroCarta": "", "numeroMovimenti": "40", "prosegui": "esegui",
-            "selPan": Config.posteidcarta}
-    page = requests.post(url, data=data, cookies=cookie, headers=headerdesktop, timeout=timeoutconnection)
 
-    # Scrappo il contenuto della pagina per acquisire l'elenco dei movimenti
-    soup = BeautifulSoup(page.text, "html.parser")
+    # Acquisisco i movimenti della carta
+    url = "https://postepay.poste.it/ppay/private/rest/ppayUtenteService/dettaglioMovimenti"
 
-    for tablesaldo in soup.find_all("table", attrs={"class": "t-data", "brk:name": "listamov_table"}):
-        for idx, row in enumerate(tablesaldo.findAll("tr")):
+    data = {"data": {"alias": Config.posteidcarta, "numeroMovimentiPagina": "40", "numeroMovimentiSaltoPaginazione": 0}}
 
-            # Se sto analizzando la prima riga della tabella (ovvero quella con i titoli) salto e proseguo
-            if idx == 0:
-                continue
+    headerdesktop = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:62.0) Gecko/20100101 Firefox/62.0",
+                     "Accept": "application/json, text/plain, */*",
+                     "Accept-Language": "it,en-US;q=0.7,en;q=0.3",
+                     "Accept-Encoding": "gzip, deflate, br",
+                     "Referer": "https://postepay.poste.it/ppay/private/pages/index.html",
+                     "requestID": "PPAY.WEB.%s" % randint(1000000000000, 9999999999999),
+                     "requestTimestamp": datetime.utcnow().strftime("%d/%m/%Y - %H:%M:%S"),
+                     "Content-Type": "application/json;charset=utf-8",
+                     "Content-Length": "194",
+                     "DNT": "1",
+                     "Connection": "keep-alive",
+                     "Pragma": "no-cache",
+                     "Cache-Control": "no-cache"}
 
-            cells = row.findAll("td")
+    page = requests.post(url, json=data, cookies=cookie, headers=headerdesktop, timeout=timeoutconnection)
 
-            saldodata = cells[0].text.strip()
-            saldocontabile = cells[1].text.strip()
-            saldocontabile = saldocontabile.replace("\t", "")
-            saldocontabile = saldocontabile.replace(" ", "")
-            saldocontabile = saldocontabile.replace("\r", "")
-            saldocontabile = saldocontabile.replace("\n", "")
+    data = json.loads(page.text)
 
-            saldodisponibile = cells[2].text.strip().replace("\t", "")
-            saldodisponibile = saldodisponibile.replace("\t", "")
-            saldodisponibile = saldodisponibile.replace(" ", "")
-            saldodisponibile = saldodisponibile.replace("\r", "")
-            saldodisponibile = saldodisponibile.replace("\n", "")
+    if data:
+        # Identificico il saldo attuale della carta
+        saldodata = datetime.utcfromtimestamp(data["data"]["datiSaldo"]["dataSaldo"] / 1000).strftime("%d/%m/%Y")
+        saldocontabile = str(data["data"]["datiSaldo"]["saldoContabile"])
+        saldocontabile = "%s,%s" % (saldocontabile[:-2], saldocontabile[-2:])
+        saldodisponibile = str(data["data"]["datiSaldo"]["saldoDisponibile"])
+        saldodisponibile = "%s,%s" % (saldodisponibile[:-2], saldodisponibile[-2:])
 
-    for table in soup.find_all("table", attrs={"class": "t-data", "id": "row"}):
-        for idx, row in enumerate(table.findAll("tr")):
+        # Identifico ogni singolo movimento
+        for each in data["data"]["listaMovimenti"]:
+            importo = str(each["importo"])
+            accredito = ""
+            addebito = ""
 
-            # Se sto analizzando la prima riga della tabella (ovvero quella con i titoli) salto e proseguo
-            if idx == 0:
-                continue
+            if "POSITIVO" in each["segno"]:
+                accredito = "+%s,%s" % (importo[:-2], importo[-2:])
+            else:
+                addebito = "-%s,%s" % (importo[:-2], importo[-2:])
 
-            cells = row.findAll("td")
-
-            datacontabile = cells[0].text.strip()
-            datavaluta = cells[1].text.strip()
-            addebito = cells[2].text.strip()
-            accredito = cells[3].text.strip()
-            descrizioneoperazione = cells[4].text.strip()
+            descrizioneoperazione = each["descrizione"]
+            datacontabile = datetime.utcfromtimestamp(each["dataContabile"] / 1000).strftime("%d/%m/%Y")
+            datavaluta = datetime.utcfromtimestamp(each["dataValuta"] / 1000).strftime("%d/%m/%Y")
 
             # Calcolo HASH della descrizione e della data valuta per identificare univocamente ogni movimento
-            hashare = datavaluta + descrizioneoperazione
-            casehash = hashlib.sha256(hashare.encode()).hexdigest()
+            transaction = datavaluta + descrizioneoperazione
+            hashtransaction = hashlib.sha256(transaction.encode()).hexdigest()
 
-            if casehash not in movimentiList:
-                logging.info("Nuovo movimento rilevato", exc_info=True)
+            if hashtransaction not in movimentiList:
+                logging.info("Nuovo movimento rilevato")
 
                 # Invio una eMail di notifica
                 send_email(datacontabile, datavaluta, addebito, accredito, descrizioneoperazione, saldodata,
                            saldocontabile, saldodisponibile)
 
                 # Salvo il nuovo movimento
-                movimentiList.append(casehash)
-                save_analyzed_case(casehash)
+                movimentiList.append(hashtransaction)
+                save_analyzed_case(hashtransaction)
 
 
 if __name__ == "__main__":
