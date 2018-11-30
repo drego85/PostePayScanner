@@ -8,7 +8,10 @@ import logging
 import requests
 from random import randint
 from datetime import datetime
-from bs4 import BeautifulSoup
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+# Disattivo i warning di sicurezza di SSL, avendo il sito Poste Italiane diversi errori di implementazione dei certificati
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Inizializzo i LOG
 logging.basicConfig(filename="postepay.log",
@@ -110,7 +113,7 @@ def main():
 
     session = requests.Session()
     data = {"username": Config.posteusername, "password": Config.postepassword}
-    session.post(url, data=data, headers=headerdesktop, timeout=timeoutconnection)
+    session.post(url, data=data, headers=headerdesktop, timeout=timeoutconnection, verify=False)
     cookie = session.cookies.get_dict()
 
     # Acquisisco i movimenti della carta
@@ -132,7 +135,7 @@ def main():
                      "Pragma": "no-cache",
                      "Cache-Control": "no-cache"}
 
-    page = requests.post(url, json=data, cookies=cookie, headers=headerdesktop, timeout=timeoutconnection)
+    page = requests.post(url, json=data, cookies=cookie, headers=headerdesktop, timeout=timeoutconnection, verify=False)
 
     data = json.loads(page.text)
 
